@@ -1,4 +1,4 @@
-``` c++
+``` c
 /*
 *********************************************************************************************************
 *                                                uC/OS-II
@@ -36,13 +36,11 @@
 * Note: Index into table is bit pattern to resolve highest priority
 *       Indexed value corresponds to highest priority bit position (i.e. 0..7)
 *********************************************************************************************************
+表中的索引是用来解析最高优先级的位模式
+初始化、启动、中断管理、时钟中断、任务调度及事件处理等用于系统基本维持的函数。
 */
-// 用于查找到指定的 index值的 为1 的最低位
-	//这是因为 优先值越低的优先级越高
-	// 比如输入 00110100(52) 得到的是 2u 即知道 最低位为第2位
-```
-![](img/2019-12-22-00-23-48.png)
-```c
+
+// 最高优先级的查找表
 INT8U  const  OSUnMapTbl[256] =
 {
 	0u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x00 to 0x0F                   */
@@ -70,19 +68,19 @@ INT8U  const  OSUnMapTbl[256] =
 *********************************************************************************************************
 */
 
-static  void  OS_InitEventList (void);
+static  void  OS_InitEventList (void);//初始化事件列表
 
-static  void  OS_InitMisc (void);
+static  void  OS_InitMisc (void);//初始化变量
 
-static  void  OS_InitRdyList (void);
+static  void  OS_InitRdyList (void);//初始化就绪表
 
-static  void  OS_InitTaskIdle (void);
+static  void  OS_InitTaskIdle (void);//创建和初始化idle任务
 
 #if OS_TASK_STAT_EN > 0u
-static  void  OS_InitTaskStat (void);
+static  void  OS_InitTaskStat (void);//初始化统计任务
 #endif
 
-static  void  OS_InitTCBList (void);
+static  void  OS_InitTCBList (void);//初始化tcb列表
 
 static  void  OS_SchedNew (void);
 
@@ -110,6 +108,27 @@ static  void  OS_SchedNew (void);
 *                        OS_ERR_NAME_GET_ISR        if you are trying to call this function from an ISR
 *
 * Returns    : The length of the string or 0 if the 'pevent' is a NULL pointer.
+获取SEMAPHORE，MUTEX，MAILBOX或QUEUE的名称
+*
+*说明：此函数用于获取分配给信号量，互斥量，邮箱或队列的名称。
+*
+*参数：pevent是指向事件组的指针。 “ pevent”可以指向一个信号量，
+*互斥锁，邮箱或队列。就此功能而言，实际
+*类型无关紧要。
+*
+* pname是指向将接收信号量名称的ASCII字符串的指针，
+*互斥锁，邮箱或队列。
+*
+* perr是指向错误代码的指针，该错误代码可以包含以下值之一：
+*
+* OS_ERR_NONE，如果名称已复制到“ pname”
+* OS_ERR_EVENT_TYPE，如果“ pevent”未指向正确的事件
+*控制块类型。
+* OS_ERR_PNAME_NULL您为'pname'传递了NULL指针
+* OS_ERR_PEVENT_NULL，如果您为'pevent'传递了NULL指针
+* OS_ERR_NAME_GET_ISR，如果您尝试从ISR调用此函数
+*
+*返回：字符串的长度；如果'pevent'是NULL指针，则返回0。
 *********************************************************************************************************
 */
 
@@ -199,6 +218,27 @@ INT8U  OSEventNameGet (OS_EVENT   *pevent,
 *                        OS_ERR_NAME_SET_ISR        if you called this function from an ISR
 *
 * Returns    : None
+将名称分配给SEMAPHORE，MUTEX，MAILBOX或QUEUE
+*
+*说明：此函数为信号量，互斥量，邮箱或队列分配名称。
+*
+*参数：pevent是指向事件组的指针。 “ pevent”可以指向一个信号量，
+*互斥锁，邮箱或队列。在涉及此功能的地方，它不会
+*与实际类型无关。
+*
+* pname是指向ASCII字符串的指针，该字符串将用作信号灯的名称，
+*互斥锁，邮箱或队列。
+*
+* perr是指向错误代码的指针，该错误代码可以包含以下值之一：
+*
+* OS_ERR_NONE，如果恢复了所请求的任务
+* OS_ERR_EVENT_TYPE，如果“ pevent”未指向正确的事件
+*控制块类型。
+* OS_ERR_PNAME_NULL您为'pname'传递了NULL指针
+* OS_ERR_PEVENT_NULL，如果您为'pevent'传递了NULL指针
+* OS_ERR_NAME_SET_ISR（如果您从ISR调用了此函数）
+*
+*返回：无
 *********************************************************************************************************
 */
 
@@ -330,10 +370,74 @@ void  OSEventNameSet (OS_EVENT  *pevent,
 *
 *              2) 'pevents_rdy' initialized to NULL PRIOR to all other validation or function handling in
 *                 case of any error(s).
+挂多个事件
+*
+*说明：此函数等待多个事件。如果在开始时准备好多个事件
+*挂断电话，然后所有可用事件均返回就绪状态。如果任务必须继续
+*多个事件，那么只有第一个发布或中止的事件才返回就绪状态。
+*
+*参数：pevents_pend是指向以NULL结尾的事件控制块数组的指针。
+*
+* pevents_rdy是指向数组的指针，以返回可用的事件控制块
+*或准备好。数组的大小必须大于或等于该大小
+*为“ pevents_pend”数组，包括终止NULL。
+*
+* pmsgs_rdy是指向数组的指针，该数组可以从任何可用的消息类型返回消息
+*事件。数组的大小必须大于或等于
+*'pevents_pend'数组，不包括终止NULL。由于NULL
+*消息是有效消息，此数组不能为NULL终止。代替，
+*每个可用的消息类型事件均在“ pmsgs_rdy”中返回其消息
+*数组与事件在“ pevents_rdy”数组中返回的索引相同。
+*所有其他“ pmsgs_rdy”数组索引均填充有NULL消息。
+*
+*超时是可选的超时时间（以时钟滴答为单位）。如果非零，您的任务将
+*等待资源达到此参数指定的时间。
+*如果您指定0，那么您的任务将永远等待指定的时间
+*事件，或者直到资源可用（或事件发生）为止。
+*
+* perr是指向将存储错误消息的位置的指针。可能的错误
+*消息是：
+*
+* OS_ERR_NONE调用成功，您的任务拥有资源
+*或者，您正在等待的事件已发生；检查
+*'pevents_rdy'数组，有可用的事件。
+* OS_ERR_PEND_ABORT等待事件的事件被中止；检查
+*'pevents_rdy'数组，事件被中止。
+* OS_ERR_TIMEOUT在指定的范围内未收到事件
+*                                                '暂停'。
+* OS_ERR_PEVENT_NULL如果'pevents_pend'，'pevents_rdy'或'pmsgs_rdy'是
+* NULL指针。
+* OS_ERR_EVENT_TYPE如果您没有传递指向信号量数组的指针，
+*邮箱和/或队列。
+* OS_ERR_PEND_ISR如果您是从ISR调用此函数的，则返回结果
+*会导致停权。
+* OS_ERR_PEND_LOCKED如果在调度程序被锁定时调用了此函数。
+*
+*返回：> 0返回准备就绪或中止的事件数。
+* == 0，如果由于超时或错误而没有任何事件返回就绪状态。
+*
+*注意：1）a。将“ pevents_pend”数组验证为有效的OS_EVENTs：
+*
+*信号灯，邮箱，队列
+*
+* b。返回所有可用的事件和消息（如果有）
+*
+*                 C。将当前任务优先级作为待处理添加到每个事件的等待列表
+*在OS_EventTaskWaitMulti（）中执行
+*
+* d。等待任何多个事件
+*
+* e。从每个事件的等待列表中删除当前任务优先级为待处理
+*如果事件发布或中止，则在OS_EventTaskRdy（）中执行
+*
+*                 F。返回任何发布或中止的事件（如果有）
+*其他
+*返回超时
+*
+* 2）在所有其他验证或函数处理之前，将“ pevents_rdy”初始化为NULL
+*如果有任何错误。
 *********************************************************************************************************
-*/ //给与事件组，让task 进行这些事件的请求，只有当这些事件中的某一个发生后
-		//task 才会继续运行，否则则按照正常流程将程序挂起
-		// 只不过使用的 挂起函数是配套的 OS_EventTaskWaitMulti
+*/
 /*$PAGE*/
 #if ((OS_EVENT_EN) && (OS_EVENT_MULTI_EN > 0u))
 INT16U  OSEventPendMulti (OS_EVENT  **pevents_pend,
@@ -438,13 +542,12 @@ INT16U  OSEventPendMulti (OS_EVENT  **pevents_pend,
 	
 	/*$PAGE*/
 	events_rdy     =  OS_FALSE;
-	events_rdy_nbr =  0u; // 准备好的事件的数量
+	events_rdy_nbr =  0u;
 	events_stat    =  OS_STAT_RDY;
 	pevents        =  pevents_pend;
 	pevent         = *pevents;
 	OS_ENTER_CRITICAL();
-	// 先判断事件是否已经准备好了，如果是 则不需要挂起程序
-	///根据不同的 事件类型进行不同的操作，这些操作基本和 各个事件类型的 Pend函数做的操作差不多
+	
 	while (pevent != (OS_EVENT *)0)                     /* See if any events already available         */
 	{
 		switch (pevent->OSEventType)
@@ -551,8 +654,6 @@ INT16U  OSEventPendMulti (OS_EVENT  **pevents_pend,
 	
 	switch (OSTCBCur->OSTCBStatPend)                    /* Handle event posted, aborted, or timed-out  */
 	{
-		// 对于 OK 和 ABORT的情况
-			// OSTCBEventPtr 通常通过 OS_EventTaskRdy 或是 OS_EventTaskWait 来设置（后者是等待单个事件的时候 的时候）
 		case OS_STAT_PEND_OK:
 		case OS_STAT_PEND_ABORT:
 			pevent = OSTCBCur->OSTCBEventPtr;
@@ -644,35 +745,43 @@ INT16U  OSEventPendMulti (OS_EVENT  **pevents_pend,
 *              creating any uC/OS-II object and, prior to calling OSStart().
 *
 * Arguments  : none
-*
+*初始化函数
 * Returns    : none
+初始化
+*
+*说明：此函数用于初始化uC / OS-II的内部，并且必须在调用之前
+*在调用OSStart（）之前，创建任何uC / OS-II对象。
+*
+*参数：无
+*初始化函数
+*返回：无
 *********************************************************************************************************
 */
 
 void  OSInit (void)
 {
-	OSInitHookBegin();                                           /* Call port specific initialization code   */
-	OS_InitMisc();                                               /* Initialize miscellaneous variables       */
-	OS_InitRdyList();                                            /* Initialize the Ready List                */
-	OS_InitTCBList();                                            /* Initialize the free list of OS_TCBs      */
-	OS_InitEventList();                                          /* Initialize the free list of OS_EVENTs    */
+	OSInitHookBegin();                                           /* 调用用户特定的初始化代码（通过一个接口函数实现用户要求的插件式进入系统中）*/
+	OS_InitMisc();                                            /* 初始化变量*/   
+	OS_InitRdyList();                                            /* 初始化就绪列表*/
+	OS_InitTCBList();                                           /* 初始化OS_TCB空闲列表*/
+	OS_InitEventList();                                          /* 初始化OS_EVENT空闲列表*/
 #if (OS_FLAG_EN > 0u) && (OS_MAX_FLAGS > 0u)
-	OS_FlagInit();                                               /* Initialize the event flag structures     */
+	OS_FlagInit();                                               /* 初始化实践标志结构     */
 #endif
 #if (OS_MEM_EN > 0u) && (OS_MAX_MEM_PART > 0u)
-	OS_MemInit();                                                /* Initialize the memory manager            */
+	OS_MemInit();                                                /* 初始化内存管理器*/
 #endif
 #if (OS_Q_EN > 0u) && (OS_MAX_QS > 0u)
-	OS_QInit();                                                  /* Initialize the message queue structures  */
+	OS_QInit();                                                  /* 初始化队列消息  */
 #endif
-	OS_InitTaskIdle();                                           /* Create the Idle Task                     */
+	OS_InitTaskIdle();                                           /* 创建空闲任务                   */
 #if OS_TASK_STAT_EN > 0u
-	OS_InitTaskStat();                                           /* Create the Statistic Task                */
+	OS_InitTaskStat();                                           /* 创建统计任务               */
 #endif
 #if OS_TMR_EN > 0u
-	OSTmr_Init();                                                /* Initialize the Timer Manager             */
+	OSTmr_Init();                                                /*初始化时间管理器             */
 #endif
-	OSInitHookEnd();                                             /* Call port specific init. code            */
+	OSInitHookEnd();                                             /* 调用用户特定的初始化代码            */
 #if OS_DEBUG_EN > 0u
 	OSDebugInit();
 #endif
@@ -700,6 +809,8 @@ void  OSInit (void)
 *              5) You are allowed to nest interrupts up to 255 levels deep.
 *              6) I removed the OS_ENTER_CRITICAL() and OS_EXIT_CRITICAL() around the increment because
 *                 OSIntEnter() is always called with interrupts disabled.
+
+实时性主要体现在对于中断的响应上，要求要尽可能快地响应中断，在中断处理程序中快速处理
 *********************************************************************************************************
 */
 
@@ -752,17 +863,15 @@ void  OSIntExit (void)
 		{
 			if (OSLockNesting == 0u)                       /* ... and not locked.                      */
 			{
-				OS_SchedNew(); // 找到最高优先级的 task 即 找到 OSPrioHighRdy
+				OS_SchedNew();
 				OSTCBHighRdy = OSTCBPrioTbl[OSPrioHighRdy];
 				
 				if (OSPrioHighRdy != OSPrioCur)            /* No Ctx Sw if current task is highest rdy */
 				{
 #if OS_TASK_PROFILE_EN > 0u
-					//此任务被切换进入的次数 增加
 					OSTCBHighRdy->OSTCBCtxSwCtr++;         /* Inc. # of context switches to this task  */
 #endif
 					OSCtxSwCtr++;                          /* Keep track of the number of ctx switches */
-					// 为汇编函数
 					OSIntCtxSw();                          /* Perform interrupt level ctx switch       */
 				}
 			}
@@ -949,6 +1058,7 @@ void  OSStart (void)
 * Returns    : none
 *********************************************************************************************************
 */
+
 #if OS_TASK_STAT_EN > 0u
 void  OSStatInit (void)
 {
@@ -961,7 +1071,6 @@ void  OSStatInit (void)
 	OS_EXIT_CRITICAL();
 	OSTimeDly (OS_TICKS_PER_SEC / 10u);          /* Determine MAX. idle counter value for 1/10 second  */
 	OS_ENTER_CRITICAL();
-	// 使用0.1s 让cpu只运行 idle来获得预期的最大的 CPUIdleCtr
 	OSIdleCtrMax = OSIdleCtr;                    /* Store maximum idle counter count in 1/10 second    */
 	OSStatRdy    = OS_TRUE;
 	OS_EXIT_CRITICAL();
@@ -1044,24 +1153,20 @@ void  OSTimeTick (void)
 				if (ptcb->OSTCBDly == 0u)                  /* Check for timeout                            */
 				{
 					if ((ptcb->OSTCBStat & OS_STAT_PEND_ANY) != OS_STAT_RDY)
-					{// 如果在 进行 任意消息的等待OS_STAT_PEND_ANY = (OS_STAT_SEM | OS_STAT_MBOX | OS_STAT_Q | OS_STAT_MUTEX | OS_STAT_FLAG)
-							// 则 清空 并设置 pend状态为 timeout 而非 ok（因为等待的事件没发生，而触发了timeout）
+					{
 						ptcb->OSTCBStat  &= (INT8U)~ (INT8U)OS_STAT_PEND_ANY;         /* Yes, Clear status flag   */
 						ptcb->OSTCBStatPend = OS_STAT_PEND_TO;                 /* Indicate PEND timeout    */
 					}
+					
 					else
 					{
 						ptcb->OSTCBStatPend = OS_STAT_PEND_OK;
 					}
-					// 如果 任务 没有被挂起 则应该 加入到 就绪队列中 就绪
-						// 需要注意的是 pend 状态并不等于挂起 状态
-						// 如果 挂起了 那么即使受到的信息都不会被运行
-							// 除非 执行了 OSTaskResume
+					
 					if ((ptcb->OSTCBStat & OS_STAT_SUSPEND) == OS_STAT_RDY)    /* Is task suspended?       */
-					{// 一个任务进入就绪态的过程如下，注意没有使用OSMapTbl 而是使用了ptcb的成员 OSTCBBitY/X
-							// 此外 类似于  prior >> 3 的过程也被 成员 OSTCBY替代
+					{
 						OSRdyGrp               |= ptcb->OSTCBBitY;             /* No,  Make ready          */
-						OSRdyTbl[ptcb->OSTCBY] |= ptcb->OSTCBBitX;			
+						OSRdyTbl[ptcb->OSTCBY] |= ptcb->OSTCBBitX;
 					}
 				}
 			}
@@ -1201,13 +1306,11 @@ INT8U  OS_EventTaskRdy (OS_EVENT  *pevent,
 	
 	OS_EventTaskRemove (ptcb, pevent);                  /* Remove this task from event   wait list     */
 #if (OS_EVENT_MULTI_EN > 0u)
-	// 对于 等待多个事件的情况
+	
 	if (ptcb->OSTCBEventMultiPtr != (OS_EVENT **)0)     /* Remove this task from events' wait lists    */
 	{
-		OS_EventTaskRemoveMulti (ptcb, ptcb->OSTCBEventMultiPtr);//将此任务从这些事件的列表中直接删除
+		OS_EventTaskRemoveMulti (ptcb, ptcb->OSTCBEventMultiPtr);
 		ptcb->OSTCBEventPtr       = (OS_EVENT  *)pevent;/* Return event as first multi-pend event ready*/
-		// 然后设置OSTCBEventPtr 为 此event（第一个发生的event）
-			// 该变量 主要是用于 OSEventPendMulti 函数来判断 是哪一个事件让task恢复运作
 	}
 	
 #endif
@@ -1237,7 +1340,7 @@ void  OS_EventTaskWait (OS_EVENT *pevent)
 	pevent->OSEventTbl[OSTCBCur->OSTCBY] |= OSTCBCur->OSTCBBitX;    /* Put task in waiting list        */
 	pevent->OSEventGrp                   |= OSTCBCur->OSTCBBitY;
 	y             =  OSTCBCur->OSTCBY;            /* Task no longer ready                              */
-	OSRdyTbl[y]  &= (OS_PRIO)~OSTCBCur->OSTCBBitX;
+	OSRdyTbl[y]  &= (OS_PRIO)~OSTCBCur->OSTCBBitX; //当前任务进入休眠
 	
 	if (OSRdyTbl[y] == 0u)                        /* Clear event grp bit if this was only task pending */
 	{
@@ -1267,7 +1370,6 @@ void  OS_EventTaskWaitMulti (OS_EVENT **pevents_wait)
 	OS_EVENT **pevents;
 	OS_EVENT  *pevent;
 	INT8U      y;
-	// 由于是多任务 所以 直到其中的一个 evnet 被触发前无法判定 具体是哪一个 event
 	OSTCBCur->OSTCBEventPtr      = (OS_EVENT  *)0;
 	OSTCBCur->OSTCBEventMultiPtr = (OS_EVENT **)pevents_wait;       /* Store ptr to ECBs in TCB        */
 	pevents =  pevents_wait;
@@ -1380,14 +1482,14 @@ void  OS_EventTaskRemoveMulti (OS_TCB    *ptcb,
 *********************************************************************************************************
 */
 #if (OS_EVENT_EN)
-void  OS_EventWaitListInit (OS_EVENT *pevent) // 初始化 event 的等待列表
+void  OS_EventWaitListInit (OS_EVENT *pevent)
 {
 	INT8U  i;
 	pevent->OSEventGrp = 0u;                     /* No task waiting on event                           */
 	
 	for (i = 0u; i < OS_EVENT_TBL_SIZE; i++)
 	{
-		pevent->OSEventTbl[i] = 0u; // 全部置0
+		pevent->OSEventTbl[i] = 0u;
 	}
 }
 #endif
@@ -1405,7 +1507,7 @@ void  OS_EventWaitListInit (OS_EVENT *pevent) // 初始化 event 的等待列表
 *********************************************************************************************************
 */
 
-static  void  OS_InitEventList (void)
+static  void  OS_InitEventList (void) //事件列表初始化
 {
 #if (OS_EVENT_EN) && (OS_MAX_EVENTS > 0u)
 #if (OS_MAX_EVENTS > 1u)
@@ -1413,18 +1515,14 @@ static  void  OS_InitEventList (void)
 	INT16U     ix_next;
 	OS_EVENT  *pevent1;
 	OS_EVENT  *pevent2;
-	OS_MemClr ((INT8U *)&OSEventTbl[0], sizeof (OSEventTbl)); /* Clear the event table                   */
+	OS_MemClr ((INT8U *)&OSEventTbl[0], sizeof (OSEventTbl)); /* 清空事件列表                  */
 	
-	for (ix = 0u; ix < (OS_MAX_EVENTS - 1u); ix++)          /* Init. list of free EVENT control blocks */
+	for (ix = 0u; ix < (OS_MAX_EVENTS - 1u); ix++)          /* 初始化ECB，并且构建空闲ECB链表*/
 	{
 		ix_next = ix + 1u;
 		pevent1 = &OSEventTbl[ix];
 		pevent2 = &OSEventTbl[ix_next];
 		pevent1->OSEventType    = OS_EVENT_TYPE_UNUSED;
-		// 将event 连接成一个 freelist
-			// 这就是 使用 void* 指针的好处之一，可以在不同狀態下對此进行不同的使用
-				// 即在 未被使用时候 作为 链表的连接指针
-				// 而在改ECB 被使用之后 此指针将会指向 message 或是 queue structure
 		pevent1->OSEventPtr     = pevent2;
 #if OS_EVENT_NAME_EN > 0u
 		pevent1->OSEventName    = (INT8U *) (void *)"?";    /* Unknown name                            */
@@ -1462,17 +1560,17 @@ static  void  OS_InitEventList (void)
 *********************************************************************************************************
 */
 
-static  void  OS_InitMisc (void)
+static  void  OS_InitMisc (void) //实现对全部变量的初始化，这些混杂的全局变量是在后序使用过程中所需要的
 {
 #if OS_TIME_GET_SET_EN > 0u
 	OSTime                    = 0uL;                       /* Clear the 32-bit system clock            */
 #endif
-	OSIntNesting              = 0u;                        /* Clear the interrupt nesting counter      */
-	OSLockNesting             = 0u;                        /* Clear the scheduling lock counter        */
-	OSTaskCtr                 = 0u;                        /* Clear the number of tasks                */
-	OSRunning                 = OS_FALSE;                  /* Indicate that multitasking not started   */
-	OSCtxSwCtr                = 0u;                        /* Clear the context switch counter         */
-	OSIdleCtr                 = 0uL;                       /* Clear the 32-bit idle counter            */
+	OSIntNesting              = 0u;                        /* 清除中断嵌套计数器，如果中断嵌套计数器大于0的话，那么说明现在的这个任务是处在中断中的      */
+	OSLockNesting             = 0u;                        /* 如果被系统锁住的话，是不能进行嵌套的；清空调度锁计数       */
+	OSTaskCtr                 = 0u;                        /* 清空当前任务数量             */
+	OSRunning                 = OS_FALSE;                  /* 没有任务正在运行   */
+	OSCtxSwCtr                = 0u;                        /* 任务切换次数         */
+	OSIdleCtr                 = 0uL;                       /* 空闲计数器为0            */
 #if OS_TASK_STAT_EN > 0u
 	OSIdleCtrRun              = 0uL;
 	OSIdleCtrMax              = 0uL;
@@ -1499,20 +1597,20 @@ static  void  OS_InitMisc (void)
 *********************************************************************************************************
 */
 
-static  void  OS_InitRdyList (void)
+static  void  OS_InitRdyList (void) //任务就绪表进行初始化
 {
 	INT8U  i;
-	OSRdyGrp      = 0u;                                    /* Clear the ready list                     */
+	OSRdyGrp      = 0u;                                    /* 任务就绪组为0                   */
 	
 	for (i = 0u; i < OS_RDY_TBL_SIZE; i++)
 	{
-		OSRdyTbl[i] = 0u;
+		OSRdyTbl[i] = 0u;   //就绪表清空
 	}
 	
-	OSPrioCur     = 0u;
-	OSPrioHighRdy = 0u;
-	OSTCBHighRdy  = (OS_TCB *)0;
-	OSTCBCur      = (OS_TCB *)0;
+	OSPrioCur     = 0u;  //没有任务运行，优先级初始化为0
+	OSPrioHighRdy = 0u;  //最高优先级也为0
+	OSTCBHighRdy  = (OS_TCB *)0;   //  最该优先级的任务控制块的指针初始化
+	OSTCBCur      = (OS_TCB *)0;	//当前运行的任务块的指针初始化
 }
 
 /*$PAGE*/
@@ -1528,16 +1626,14 @@ static  void  OS_InitRdyList (void)
 * Returns    : none
 *********************************************************************************************************
 */
-// TaskIdl 的优先级为 最低级
-	// 用于在没有其它的任何的task 的时候被执行
-static  void  OS_InitTaskIdle (void)
+
+static  void  OS_InitTaskIdle (void)//创建和初始化第一个任务，空闲任务
 {
 #if OS_TASK_NAME_EN > 0u
 	INT8U  err;
 #endif
 #if OS_TASK_CREATE_EXT_EN > 0u
-#if OS_STK_GROWTH == 1u //根据栈的 方向来 设置栈的 顶部和 底部
-												// ==1 即 内存分配是由高到低的 所以bottom 指向的是 低地址 即 &OSTaskIdleStk[0]
+#if OS_STK_GROWTH == 1u
 	(void)OSTaskCreateExt (OS_TaskIdle,
 												 (void *)0,                                 /* No arguments passed to OS_TaskIdle() */
 												 &OSTaskIdleStk[OS_TASK_IDLE_STK_SIZE - 1u],/* Set Top-Of-Stack                     */
@@ -1559,6 +1655,7 @@ static  void  OS_InitTaskIdle (void)
 												 OS_TASK_OPT_STK_CHK | OS_TASK_OPT_STK_CLR);/* Enable stack checking + clear stack  */
 #endif
 #else
+//如果不使用扩展的创建函数的功能
 #if OS_STK_GROWTH == 1u
 	(void)OSTaskCreate (OS_TaskIdle,
 											(void *)0,
@@ -1571,7 +1668,7 @@ static  void  OS_InitTaskIdle (void)
 											OS_TASK_IDLE_PRIO);
 #endif
 #endif
-#if OS_TASK_NAME_EN > 0u
+#if OS_TASK_NAME_EN > 0u//如果使用函数名称
 	OSTaskNameSet (OS_TASK_IDLE_PRIO, (INT8U *) (void *)"uC/OS-II Idle", &err);
 #endif
 }
@@ -1588,7 +1685,7 @@ static  void  OS_InitTaskIdle (void)
 * Returns    : none
 *********************************************************************************************************
 */
-// 初始化 统计任务
+
 #if OS_TASK_STAT_EN > 0u
 static  void  OS_InitTaskStat (void)
 {
@@ -1648,18 +1745,17 @@ static  void  OS_InitTaskStat (void)
 * Returns    : none
 *********************************************************************************************************
 */
-// OSInit 调用 初始化 OS_TCBs 的函
-	// 实际初始化的内容是 OSTCBList 和OSTCBFreeList
-static  void  OS_InitTCBList (void)
+
+static  void  OS_InitTCBList (void)//空闲链表和就绪链表
 {
 	INT8U    ix;
 	INT8U    ix_next;
-	OS_TCB  *ptcb1;
-	OS_TCB  *ptcb2;
-	OS_MemClr ((INT8U *)&OSTCBTbl[0],     sizeof (OSTCBTbl));    /* Clear all the TCBs                 */
-	OS_MemClr ((INT8U *)&OSTCBPrioTbl[0], sizeof (OSTCBPrioTbl)); /* Clear the priority table           */
+	OS_TCB  *ptcb1; //任务控制块指针
+	OS_TCB  *ptcb2;//任务控制块指针
+	OS_MemClr ((INT8U *)&OSTCBTbl[0],     sizeof (OSTCBTbl));    /* 对所有的任务控制块清空               */
+	OS_MemClr ((INT8U *)&OSTCBPrioTbl[0], sizeof (OSTCBPrioTbl)); /*   任务优先级指针表清空      */
 	
-	for (ix = 0u; ix < (OS_MAX_TASKS + OS_N_SYS_TASKS - 1u); ix++)      /* Init. list of free TCBs     */
+	for (ix = 0u; ix < (OS_MAX_TASKS + OS_N_SYS_TASKS - 1u); ix++)      /* 对空闲块进行初始化     */
 	{
 		ix_next =  ix + 1u;
 		ptcb1   = &OSTCBTbl[ix];
@@ -1675,8 +1771,8 @@ static  void  OS_InitTCBList (void)
 #if OS_TASK_NAME_EN > 0u
 	ptcb1->OSTCBTaskName    = (INT8U *) (void *)"?";             /* Unknown name                       */
 #endif
-	OSTCBList               = (OS_TCB *)0;                       /* TCB lists initializations          */
-	OSTCBFreeList           = &OSTCBTbl[0];
+	OSTCBList               = (OS_TCB *)0;             //就绪表为空          /* TCB lists initializations          */
+	OSTCBFreeList           = &OSTCBTbl[0];	//创建一个空闲的单向列表，指向表头，
 }
 /*$PAGE*/
 /*
@@ -1698,7 +1794,7 @@ static  void  OS_InitTCBList (void)
 *                 of the alignment of the destination.
 *********************************************************************************************************
 */
-// 用于清除 对应的 区域内的内存内容 清洁方式很简单 直接设置对应的 值为0即可
+
 void  OS_MemClr (INT8U  *pdest,
 								 INT16U  size)
 {
@@ -1732,7 +1828,7 @@ void  OS_MemClr (INT8U  *pdest,
 *                 of the alignment of the source and destination.
 *********************************************************************************************************
 */
-// 复制
+
 void  OS_MemCopy (INT8U  *pdest,
 									INT8U  *psrc,
 									INT16U  size)
@@ -1760,8 +1856,8 @@ void  OS_MemCopy (INT8U  *pdest,
 *              2) Rescheduling is prevented when the scheduler is locked (see OS_SchedLock())
 *********************************************************************************************************
 */
-// 任务的调度函数
-void  OS_Sched (void)
+
+void  OS_Sched (void) //任务调度函数
 {
 #if OS_CRITICAL_METHOD == 3u                           /* Allocate storage for CPU status register     */
 	OS_CPU_SR  cpu_sr = 0u;
@@ -1772,16 +1868,15 @@ void  OS_Sched (void)
 	{
 		if (OSLockNesting == 0u)                       /* ... scheduler is not locked                  */
 		{
-			OS_SchedNew();// 寻找最高优先级的任务（即 设置OSPrioHighRdy）
+			OS_SchedNew();
 			OSTCBHighRdy = OSTCBPrioTbl[OSPrioHighRdy];
-			//如果当前的 task 即为 最高优先级的task 则不需要进行 switch 操作
-			if (OSPrioHighRdy != OSPrioCur)            /* No Ctx Sw if current task is highest rdy     */
+			
+			if (OSPrioHighRdy != OSPrioCur)            /* No Ctx Sw if current task is highest rdy 不是正在进行的任务    */
 			{
 #if OS_TASK_PROFILE_EN > 0u
-				OSTCBHighRdy->OSTCBCtxSwCtr++;         /* Inc. # of context switches to this task      */
+				OSTCBHighRdy->OSTCBCtxSwCtr++;         /* Inc. # of context switches to this task     切换次数加+ */
 #endif
 				OSCtxSwCtr++;                          /* Increment context switch counter             */
-				// 上下文切换本体
 				OS_TASK_SW();                          /* Perform a context switch                     */
 			}
 		}
@@ -1812,35 +1907,30 @@ static  void  OS_SchedNew (void)
 #if OS_LOWEST_PRIO <= 63u                        /* See if we support up to 64 tasks                   */
 	INT8U   y;
 	y             = OSUnMapTbl[OSRdyGrp];
-	OSPrioHighRdy = (INT8U) ((y << 3u) + OSUnMapTbl[OSRdyTbl[y]]);
-	
-// 对于 最小优先度大于 2的六次方的情况
-		// 由于 OSUnMapTbl 依旧是2的八次方的大小
-			// 所以要分开来判断在低8位没有任务的情况下需要判断高八位
+	OSPrioHighRdy = (INT8U) ((y << 3u) + OSUnMapTbl[OSRdyTbl[y]]);//找到目前就绪的任务重优先级最高的
 #else                                            /* We support up to 256 tasks                         */
 	INT8U     y;
 	OS_PRIO  *ptbl;
 	
 	if ((OSRdyGrp & 0xFFu) != 0u)
-	{// 低八位
+	{
 		y = OSUnMapTbl[OSRdyGrp & 0xFFu];
 	}
 	
 	else
 	{
-		// 高八位
-		y = OSUnMapTbl[ (OS_PRIO) (OSRdyGrp >> 8u) & 0xFFu] + 8u; // +8（1000） 是因为这是高八位 
+		y = OSUnMapTbl[ (OS_PRIO) (OSRdyGrp >> 8u) & 0xFFu] + 8u;
 	}
-	// 对于 OSRdyTbl 一样需要判断高低八位
+	
 	ptbl = &OSRdyTbl[y];
 	
 	if ((*ptbl & 0xFFu) != 0u)
-	{//低八位
+	{
 		OSPrioHighRdy = (INT8U) ((y << 4u) + OSUnMapTbl[ (*ptbl & 0xFFu)]);
 	}
 	
 	else
-	{//高八位
+	{
 		OSPrioHighRdy = (INT8U) ((y << 4u) + OSUnMapTbl[ (OS_PRIO) (*ptbl >> 8u) & 0xFFu] + 8u);
 	}
 	
@@ -1863,7 +1953,7 @@ static  void  OS_SchedNew (void)
 *              2) The string to check must be less than 255 characters long.
 *********************************************************************************************************
 */
-// 判断 ASCII 字符串的 长度
+
 #if (OS_EVENT_NAME_EN > 0u) || (OS_FLAG_NAME_EN > 0u) || (OS_MEM_NAME_EN > 0u) || (OS_TASK_NAME_EN > 0u) || (OS_TMR_CFG_NAME_EN > 0u)
 INT8U  OS_StrLen (INT8U *psrc)
 {
@@ -1908,7 +1998,7 @@ INT8U  OS_StrLen (INT8U *psrc)
 *                 power.
 *********************************************************************************************************
 */
-// Idle Task 的运行主体
+
 void  OS_TaskIdle (void *p_arg)
 {
 #if OS_CRITICAL_METHOD == 3u                     /* Allocate storage for CPU status register           */
@@ -1919,9 +2009,7 @@ void  OS_TaskIdle (void *p_arg)
 	for (;;)
 	{
 		OS_ENTER_CRITICAL();
-		OSIdleCtr++; // 每秒内 OSIdleCtr的值可以看作是CPU的 运行效率
-										// 而实际上 TaskStat 也是使用这个值来判断cpu 的占用率的
-											// 具体看 OS_TaskStat函数
+		OSIdleCtr++;
 		OS_EXIT_CRITICAL();
 		OSTaskIdleHook();                        /* Call user definable HOOK                           */
 	}
@@ -1963,16 +2051,16 @@ void  OS_TaskStat (void *p_arg)
 	{
 		OSTimeDly (2u * OS_TICKS_PER_SEC / 10u); /* Wait until statistic task is ready                 */
 	}
-	//OSIdleCtrMax 在 OSStatInit 中被设置
+	
 	OSIdleCtrMax /= 100uL;
 	
 	if (OSIdleCtrMax == 0uL)
 	{
 		OSCPUUsage = 0u;
-#if OS_TASK_SUSPEND_EN > 0u//如果有允许使用 suspend 的话
+#if OS_TASK_SUSPEND_EN > 0u
 		(void)OSTaskSuspend (OS_PRIO_SELF);
 #else
-		// 否则使用一个 for循环来让改 task 不做事
+		
 		for (;;)
 		{
 			OSTimeDly (OS_TICKS_PER_SEC);
@@ -1991,7 +2079,6 @@ void  OS_TaskStat (void *p_arg)
 		OSIdleCtrRun = OSIdleCtr;                /* Obtain the of the idle counter for the past second */
 		OSIdleCtr    = 0uL;                      /* Reset the idle counter for the next second         */
 		OS_EXIT_CRITICAL();
-		// OSCPUUsage 即为 此 0.1s内的 cpu 利用率
 		OSCPUUsage   = (INT8U) (100uL - OSIdleCtrRun / OSIdleCtrMax);
 		OSTaskStatHook();                        /* Invoke user definable hook                         */
 #if (OS_TASK_STAT_STK_CHK_EN > 0u) && (OS_TASK_CREATE_EXT_EN > 0u)
@@ -2032,16 +2119,14 @@ void  OS_TaskStatStkChk (void)
 			
 			if (ptcb != (OS_TCB *)0)                                 /* Make sure task 'ptcb' is ...   */
 			{
-				//非保留的 TCB块
 				if (ptcb != OS_TCB_RESERVED)                         /* ... still valid.               */
 				{
 #if OS_TASK_PROFILE_EN > 0u
-#if OS_STK_GROWTH == 1u // 同样需要判断 内存存储方向
+#if OS_STK_GROWTH == 1u
 					ptcb->OSTCBStkBase = ptcb->OSTCBStkBottom + ptcb->OSTCBStkSize;
 #else
 					ptcb->OSTCBStkBase = ptcb->OSTCBStkBottom - ptcb->OSTCBStkSize;
 #endif
-					// 栈使用的字节数
 					ptcb->OSTCBStkUsed = stk_data.OSUsed;            /* Store number of entries used   */
 #endif
 				}
@@ -2094,56 +2179,52 @@ void  OS_TaskStatStkChk (void)
 *********************************************************************************************************
 */
 
-INT8U  OS_TCBInit (INT8U    prio,// 优先级
-									 OS_STK  *ptos,// 栈顶指针 假定CPU的寄存器已经指向了这个栈顶
-									 OS_STK  *pbos,// 栈底指针
+// tcb初始化
+//初始化任务控制块TCB(优先级、栈顶指针、栈底指针、任务标志符、堆栈容量、扩展指针、选择项
+INT8U  OS_TCBInit (INT8U    prio,								//
+									 OS_STK  *ptos,
+									 OS_STK  *pbos,
 									 INT16U   id,
 									 INT32U   stk_size,
-									 void    *pext,// 用户提供的任意类型指针，可以指向任何内容 ，作为 TCB的拓展区域 
+									 void    *pext,
 									 INT16U   opt)
 {
-	OS_TCB    *ptcb;
-#if OS_CRITICAL_METHOD == 3u                               /* Allocate storage for CPU status register */
+	OS_TCB    *ptcb;        //创建一个tcb的指针
+#if OS_CRITICAL_METHOD == 3u//中断函数设置为模式3                        /* Allocate storage for CPU status register */
 	OS_CPU_SR  cpu_sr = 0u;
 #endif
 #if OS_TASK_REG_TBL_SIZE > 0u
 	INT8U      i;
 #endif
 	OS_ENTER_CRITICAL();
-	// OSTCBFreeList 指向的是 已经创建的
-		// 但是没有被使用的TCB
-	ptcb = OSTCBFreeList;                                  /* Get a free TCB from the free TCB list    */
+	ptcb = OSTCBFreeList;      //分配一个空任务控制块给ptcb                               /* Get a free TCB from the free TCB list    */
 	
-	if (ptcb != (OS_TCB *)0)
+	if (ptcb != (OS_TCB *)0) //如果缓冲池有空余TCB，这个TCB被初始化 
 	{
-		OSTCBFreeList            = ptcb->OSTCBNext;        /* Update pointer to free TCB list          */
-		OS_EXIT_CRITICAL();
-		ptcb->OSTCBStkPtr        = ptos;                   /* Load Stack pointer in TCB                */
-		ptcb->OSTCBPrio          = prio;                   /* Load task priority into TCB              */
-		ptcb->OSTCBStat          = OS_STAT_RDY;            /* Task is ready to run                     */
+		OSTCBFreeList            = ptcb->OSTCBNext;     //指向TCB的双向链接的后链接    /* Update pointer to free TCB list          */
+		OS_EXIT_CRITICAL();/打开中断 
+		ptcb->OSTCBStkPtr        = ptos;            //指向当前TCB的栈顶指针(输入的数据)         /* Load Stack pointer in TCB                */
+		ptcb->OSTCBPrio          = prio;           //保存当前TCB的优先级别(输入的数据)         /* Load task priority into TCB              */
+		ptcb->OSTCBStat          = OS_STAT_RDY;       //设定当前TCB的状态字(内容为(准备完毕))      /* Task is ready to run                     */
 		ptcb->OSTCBStatPend      = OS_STAT_PEND_OK;        /* Clear pend status                        */
-		ptcb->OSTCBDly           = 0u;                     /* Task is not delayed                      */
-#if OS_TASK_CREATE_EXT_EN > 0u
-		ptcb->OSTCBExtPtr        = pext;                   /* Store pointer to TCB extension           */
-		ptcb->OSTCBStkSize       = stk_size;               /* Store stack size                         */
-		ptcb->OSTCBStkBottom     = pbos;                   /* Store pointer to bottom of stack         */
-		ptcb->OSTCBOpt           = opt;                    /* Store task options                       */
-		ptcb->OSTCBId            = id;                     /* Store task ID                            */
-#else
-		pext                     = pext;                   /* Prevent compiler warning if not used     */
-		stk_size                 = stk_size;
-		pbos                     = pbos;
-		opt                      = opt;
-		id                       = id;
+		ptcb->OSTCBDly           = 0u;                  //允许任务等待的最大字节节拍为0      /* Task is not delayed                      */
+#if OS_TASK_CREATE_EXT_EN > 0u //允许生成OSTaskCreateExt()函数 
+		ptcb->OSTCBExtPtr        = pext;           //指向用户定义的任务控制块(扩展指针)           /* Store pointer to TCB extension           */
+		ptcb->OSTCBStkSize       = stk_size;          //设定堆栈的容量      /* Store stack size                         */
+		ptcb->OSTCBStkBottom     = pbos;                 //指向指向栈底的指针     /* Store pointer to bottom of stack         */
+		ptcb->OSTCBOpt           = opt;                 //保存OS_TCB的选择项    /* Store task options                       */
+		ptcb->OSTCBId            = id;                   //保存任务标志符   /* Store task ID                            */
+#else //否则使用旧的参数 
+		pext                     = pext;         //扩展指针            /* Prevent compiler warning if not used     */
+		stk_size                 = stk_size;//堆栈的容量 
+		pbos                     = pbos;//栈底的指针 
+		opt                      = opt;  //选择项 
+		id                       = id; //任务标志符 
 #endif
-#if OS_TASK_DEL_EN > 0u
+#if OS_TASK_DEL_EN > 0u//允许生成 OSTaskDel() 函数代码函数 
 		ptcb->OSTCBDelReq        = OS_ERR_NONE;
 #endif
-// OSTCBY 代表的是该优先级的除了 低三位（四位，取决于 OS_PRIO的类型）   外的位
-	// 用于确定此 优先级 在 OSRdyTbl/OSEventTbl等 列表中的位置
-// OSTCBX 代表的则是  优先级除了 OSTCBY 之外的低位
-	// 用于确定 此优先级是对应的 OS_PRIO类型中的第几位
-//***Bit 则是 以上二者各自的 位 mask 表示
+  //对一些参数提前运算，为了节省CPU的操作事件 
 #if OS_LOWEST_PRIO <= 63u                                         /* Pre-compute X, Y                  */
 		ptcb->OSTCBY             = (INT8U) (prio >> 3u);
 		ptcb->OSTCBX             = (INT8U) (prio & 0x07u);
@@ -2152,20 +2233,22 @@ INT8U  OS_TCBInit (INT8U    prio,// 优先级
 		ptcb->OSTCBX             = (INT8U) (prio & 0x0Fu);
 #endif
 		/* Pre-compute BitX and BitY         */
-		ptcb->OSTCBBitY          = (OS_PRIO) (1uL << ptcb->OSTCBY); 
+		ptcb->OSTCBBitY          = (OS_PRIO) (1uL << ptcb->OSTCBY);
 		ptcb->OSTCBBitX          = (OS_PRIO) (1uL << ptcb->OSTCBX);
-#if (OS_EVENT_EN)
-		ptcb->OSTCBEventPtr      = (OS_EVENT  *)0;         /* Task is not pending on an  event         */
+#if (OS_EVENT_EN) //如果不打算在应用程序中使用各类事件 
+		ptcb->OSTCBEventPtr      = (OS_EVENT  *)0;     //OS_TCB中OSTCBEventPt就不会出现     /* Task is not pending on an  event         */
 #if (OS_EVENT_MULTI_EN > 0u)
 		ptcb->OSTCBEventMultiPtr = (OS_EVENT **)0;         /* Task is not pending on any events        */
 #endif
 #endif
+//事件标志允许 且 有最大事件标志 及 允许删除任务 
 #if (OS_FLAG_EN > 0u) && (OS_MAX_FLAGS > 0u) && (OS_TASK_DEL_EN > 0u)
 		ptcb->OSTCBFlagNode  = (OS_FLAG_NODE *)0;          /* Task is not pending on an event flag     */
 #endif
 #if (OS_MBOX_EN > 0u) || ((OS_Q_EN > 0u) && (OS_MAX_QS > 0u))
 		ptcb->OSTCBMsg       = (void *)0;                  /* No message received                      */
 #endif
+
 #if OS_TASK_PROFILE_EN > 0u
 		ptcb->OSTCBCtxSwCtr    = 0uL;                      /* Initialize profiling variables           */
 		ptcb->OSTCBCyclesStart = 0uL;
@@ -2185,29 +2268,33 @@ INT8U  OS_TCBInit (INT8U    prio,// 优先级
 		
 #endif
 		OSTCBInitHook (ptcb);
+		 //调用户建立任务钩子程序 
+         //该函数能够扩展[OSTaskCreate()或OSTaskCreateExt()函数] 
+         //当OS_CPU_HOOKS_EN为1时，OSTaskCreateHook()可以在OS_CPU.C中定义 
+         //若OS_CPU_HOOKS_EN为0时，则可以在任何其它地方定义 
+         //调用此程序时中断开着的。 
 		OS_ENTER_CRITICAL();
 		OSTCBPrioTbl[prio] = ptcb;
 		OS_EXIT_CRITICAL();
 		OSTaskCreateHook (ptcb);                           /* Call user defined hook                   */
 		OS_ENTER_CRITICAL();
-		ptcb->OSTCBNext    = OSTCBList;                    /* Link into TCB chain                      */
-		//新建立的TCB 的下一个指向的是 空
+		ptcb->OSTCBNext    = OSTCBList;           //链接到任务控制块链接串 /* Link into TCB chain                      */
 		ptcb->OSTCBPrev    = (OS_TCB *)0;
 		
 		if (OSTCBList != (OS_TCB *)0)
 		{
 			OSTCBList->OSTCBPrev = ptcb;
 		}
-		// OSTCBList 永远指向最后建立的 TCB
-		OSTCBList               = ptcb;
+		
+		OSTCBList               = ptcb;//让该任务进入就绪态 
 		OSRdyGrp               |= ptcb->OSTCBBitY;         /* Make task ready to run                   */
 		OSRdyTbl[ptcb->OSTCBY] |= ptcb->OSTCBBitX;
 		OSTaskCtr++;                                       /* Increment the #tasks counter             */
-		OS_EXIT_CRITICAL();
-		return (OS_ERR_NONE);
+		OS_EXIT_CRITICAL(); //调用成功，最后让此函数返回到调用函数[OSTaskCreate()或 
+		return (OS_ERR_NONE);//OSTaskCreateExt()函数]，返回值表示分配到任务控块，并初始化了
 	}
 	
-	OS_EXIT_CRITICAL();
-	return (OS_ERR_TASK_NO_MORE_TCB);
+	OS_EXIT_CRITICAL();  //打开中断 
+	return (OS_ERR_TASK_NO_MORE_TCB);//没有更多的任务控制块被分配，将无法创建新的任务 
 }
 ```
