@@ -40,7 +40,22 @@
 初始化、启动、中断管理、时钟中断、任务调度及事件处理等用于系统基本维持的函数。
 */
 
-// 最高优先级的查找表
+```
+![](img/2019-12-22-00-23-48.png)
+1. OSRdyGrp 是用于确定对应的优先级  是OSRdyTbl中的哪一个元素
+2. 而 在确定了 元素之后 通过使用priority 的低位（根据OS_PRIO使用的类型来决定位数如右图）
+![](img/2019-12-22-11-39-01.png)
+   1. 不同类型的实现具体参照[OSTCBX和OSTCBY相关内容](#priority)
+1. 而OSUnMapTbl 则用于查找到指定的 index值的 为1 的最低位
+   1. /这是因为 优先值越低的优先级越高
+   2. 比如输入 00110100(52) 得到的是 2u 即知道 最低位为第2位
+   3. 所以 一次具体的确定就绪的最高优先级任务的操作如下(在函数 OS_SchedNew中)：
+	![](img/![](img/2019-12-22-11-44-35.png).png)
+		1. 在1808 到 1811 之间是针对 OS_PRIO 为INT8U的情况
+		y代表的是 OSRdyGrp中为1的最低位，OSRdyTbl[y] 则是优先级最低的Group对应的元素位置
+		![](img/2019-12-22-11-48-39.png)
+
+```c
 INT8U  const  OSUnMapTbl[256] =
 {
 	0u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, 3u, 0u, 1u, 0u, 2u, 0u, 1u, 0u, /* 0x00 to 0x0F                   */
@@ -438,6 +453,10 @@ void  OSEventNameSet (OS_EVENT  *pevent,
 *如果有任何错误。
 *********************************************************************************************************
 */
+*/ //给与事件组，让task 进行这些事件的请求，只有当这些事件中的某一个发生后
+		//task 才会继续运行，否则则按照正常流程将程序挂起
+		// 只不过使用的 挂起函数是配套的 OS_EventTaskWaitMulti
+
 /*$PAGE*/
 #if ((OS_EVENT_EN) && (OS_EVENT_MULTI_EN > 0u))
 INT16U  OSEventPendMulti (OS_EVENT  **pevents_pend,
@@ -547,6 +566,8 @@ INT16U  OSEventPendMulti (OS_EVENT  **pevents_pend,
 	pevents        =  pevents_pend;
 	pevent         = *pevents;
 	OS_ENTER_CRITICAL();
+	// 先判断事件是否已经准备好了，如果是 则不需要挂起程序
+	///根据不同的 事件类型进行不同的操作，这些操作基本和 各个事件类型的 Pend函数做的操作差不多
 	
 	while (pevent != (OS_EVENT *)0)                     /* See if any events already available         */
 	{
@@ -654,6 +675,9 @@ INT16U  OSEventPendMulti (OS_EVENT  **pevents_pend,
 	
 	switch (OSTCBCur->OSTCBStatPend)                    /* Handle event posted, aborted, or timed-out  */
 	{
+
+		// 对于 OK 和 ABORT的情况
+			// OSTCBEventPtr 通常通过 OS_EventTaskRdy 或是 OS_EventTaskWait 来设置（后者是等待单个事件的时候 的时候）
 		case OS_STAT_PEND_OK:
 		case OS_STAT_PEND_ABORT:
 			pevent = OSTCBCur->OSTCBEventPtr;
@@ -1626,7 +1650,8 @@ static  void  OS_InitRdyList (void) //任务就绪表进行初始化
 * Returns    : none
 *********************************************************************************************************
 */
-
+// TaskIdl 的优先级为 最低级
+	// 用于在没有其它的任何的task 的时候被执行
 static  void  OS_InitTaskIdle (void)//创建和初始化第一个任务，空闲任务
 {
 #if OS_TASK_NAME_EN > 0u
@@ -1745,7 +1770,8 @@ static  void  OS_InitTaskStat (void)
 * Returns    : none
 *********************************************************************************************************
 */
-
+// OSInit 调用 初始化 OS_TCBs 的函
+	// 实际初始化的内容是 OSTCBList 和OSTCBFreeList
 static  void  OS_InitTCBList (void)//空闲链表和就绪链表
 {
 	INT8U    ix;
@@ -1908,6 +1934,10 @@ static  void  OS_SchedNew (void)
 	INT8U   y;
 	y             = OSUnMapTbl[OSRdyGrp];
 	OSPrioHighRdy = (INT8U) ((y << 3u) + OSUnMapTbl[OSRdyTbl[y]]);//找到目前就绪的任务重优先级最高的
+	
+// 对于 最小优先度大于 2的六次方的情况
+		// 由于 OSUnMapTbl 依旧是2的八次方的大小
+			// 所以要分开来判断在低8位没有任务的情况下需要判断高八位
 #else                                            /* We support up to 256 tasks                         */
 	INT8U     y;
 	OS_PRIO  *ptbl;
@@ -2197,6 +2227,8 @@ INT8U  OS_TCBInit (INT8U    prio,								//
 	INT8U      i;
 #endif
 	OS_ENTER_CRITICAL();
+	// OSTCBFreeList 指向的是 已经创建的
+		// 但是没有被使用的TCB
 	ptcb = OSTCBFreeList;      //分配一个空任务控制块给ptcb                               /* Get a free TCB from the free TCB list    */
 	
 	if (ptcb != (OS_TCB *)0) //如果缓冲池有空余TCB，这个TCB被初始化 
@@ -2225,6 +2257,14 @@ INT8U  OS_TCBInit (INT8U    prio,								//
 		ptcb->OSTCBDelReq        = OS_ERR_NONE;
 #endif
   //对一些参数提前运算，为了节省CPU的操作事件 
+```
+<span id="priority"></span>
+```c
+// OSTCBY 代表的是该优先级的除了 低三位（四位，取决于 OS_PRIO的类型）   外的位
+	// 用于确定此 优先级 在 OSRdyTbl/OSEventTbl等 列表中的位置
+// OSTCBX 代表的则是  优先级除了 OSTCBY 之外的低位
+	// 用于确定 此优先级是对应的 OS_PRIO类型中的第几位
+//***Bit 则是 以上二者各自的 位 mask 表示
 #if OS_LOWEST_PRIO <= 63u                                         /* Pre-compute X, Y                  */
 		ptcb->OSTCBY             = (INT8U) (prio >> 3u);
 		ptcb->OSTCBX             = (INT8U) (prio & 0x07u);
@@ -2279,13 +2319,14 @@ INT8U  OS_TCBInit (INT8U    prio,								//
 		OSTaskCreateHook (ptcb);                           /* Call user defined hook                   */
 		OS_ENTER_CRITICAL();
 		ptcb->OSTCBNext    = OSTCBList;           //链接到任务控制块链接串 /* Link into TCB chain                      */
+		//新建立的TCB 的下一个指向的是 空
 		ptcb->OSTCBPrev    = (OS_TCB *)0;
 		
 		if (OSTCBList != (OS_TCB *)0)
 		{
 			OSTCBList->OSTCBPrev = ptcb;
 		}
-		
+		// OSTCBList 永远指向最后建立的 TCB
 		OSTCBList               = ptcb;//让该任务进入就绪态 
 		OSRdyGrp               |= ptcb->OSTCBBitY;         /* Make task ready to run                   */
 		OSRdyTbl[ptcb->OSTCBY] |= ptcb->OSTCBBitX;
